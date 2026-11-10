@@ -47,7 +47,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - default
+      - hermes_private
 
 volumes:
   pgdata:
   paperclip-data:
+networks:
+  hermes_private:
+    external: true
+    name: ig4k8cw40g0ogo40wso04sog
