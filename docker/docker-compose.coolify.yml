@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
 
     volumes:
-      - ./hermes-tls/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/data/omniclinic-hermes-tls/Caddyfile:/etc/caddy/Caddyfile:ro
       - /opt/data/omniclinic-hermes-tls/server.crt:/etc/caddy/certs/server.crt:ro
       - /opt/data/omniclinic-hermes-tls/server.key:/etc/caddy/certs/server.key:ro
 
