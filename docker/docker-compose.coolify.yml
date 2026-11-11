@@ -1,4 +1,3 @@
-
 services:
   db:
     image: postgres:17-alpine
@@ -30,6 +29,8 @@ services:
       HOST: "0.0.0.0"
       PAPERCLIP_HOME: "/paperclip"
 
+      NODE_EXTRA_CA_CERTS: "/etc/omniclinic-tls/ca.crt"
+
       DATABASE_URL: "postgresql://paperclip:${POSTGRES_PASSWORD}@db:5432/paperclip"
 
       PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
@@ -43,10 +44,26 @@ services:
 
     volumes:
       - paperclip-data:/paperclip
+      - /opt/data/omniclinic-hermes-tls/ca.crt:/etc/omniclinic-tls/ca.crt:ro
 
     depends_on:
       db:
         condition: service_healthy
+      hermes-tls:
+        condition: service_started
+
+    networks:
+      - default
+
+  hermes-tls:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+
+    volumes:
+      - ./hermes-tls/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/data/omniclinic-hermes-tls/server.crt:/etc/caddy/certs/server.crt:ro
+      - /opt/data/omniclinic-hermes-tls/server.key:/etc/caddy/certs/server.key:ro
+
     networks:
       - default
       - hermes_private
@@ -54,6 +71,7 @@ services:
 volumes:
   pgdata:
   paperclip-data:
+
 networks:
   hermes_private:
     external: true
