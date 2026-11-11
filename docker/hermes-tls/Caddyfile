@@ -1,0 +1,4 @@
+https://hermes-tls:8443 {
+    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key
+    reverse_proxy http://hermes-marketing:8642
+}
