@@ -10,7 +10,7 @@ import { coordinatorAttentionQueryKey, coordinatorAttentionSummaryQueryKey } fro
 import { queryKeys } from "@/lib/queryKeys";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const fixture = vi.hoisted(() => ({ attention: vi.fn(), summary: vi.fn(), openNewIssue: vi.fn(), pathname: "/COO/issues", collapsed: false, userId: "reviewer", chats: [] as Array<{ isUnreadForMe: boolean }>,
+const fixture = vi.hoisted(() => ({ attention: vi.fn(), summary: vi.fn(), openNewIssue: vi.fn(), pluginSlotOutlet: vi.fn(), pathname: "/COO/issues", collapsed: false, userId: "reviewer", chats: [] as Array<{ isUnreadForMe: boolean }>,
   recentTasks: [] as Array<Record<string, unknown>>, projects: [] as Array<Record<string, unknown>>, projectTasks: vi.fn(), enableCases: false, agents: [] as Agent[] }));
 vi.mock("@/hooks/useAgentChatNavigation", () => ({ useAgentChatNavigation: () => ({
   companyId: "company", userId: fixture.userId, agents: { data: fixture.agents }, chats: { data: fixture.chats }, session: { isSuccess: true },
@@ -22,6 +22,16 @@ vi.mock("@/context/SidebarContext", () => ({ useSidebar: () => ({ collapsed: fix
 vi.mock("@/api/attention", () => ({ attentionApi: { list: fixture.attention, summary: fixture.summary } }));
 vi.mock("@/api/instanceSettings", () => ({ instanceSettingsApi: { getExperimental: async () => ({ enableCases: fixture.enableCases }) } }));
 vi.mock("@/api/projects", () => ({ projectsApi: { list: async () => fixture.projects } }));
+vi.mock("@/context/CompanyContext", () => ({ useOptionalCompany: () => ({ selectedCompanyId: "company", selectedCompany: { issuePrefix: "COO" } }) }));
+vi.mock("@/plugins/slots", () => ({
+  PluginSlotOutlet: (props: {
+    slotTypes: string[]; context: { companyId: string | null; companyPrefix: string | null };
+    className?: string; itemClassName?: string; missingBehavior?: string;
+  }) => {
+    fixture.pluginSlotOutlet(props);
+    return <div data-plugin-slot-types={props.slotTypes.join(",")}>Plugin slot outlet</div>;
+  },
+}));
 vi.mock("./SidebarCompanyMenu", () => ({ SidebarCompanyMenu: () => null }));
 vi.mock("@/lib/router", () => ({
   useLocation: () => ({ pathname: fixture.pathname, search: "" }),
@@ -86,6 +96,43 @@ describe("Coordinator task creation", () => {
     expect(fixture.openNewIssue).not.toHaveBeenCalled();
     await act(async () => button!.click());
     expect(fixture.openNewIssue).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Coordinator permanent navigation", () => {
+  const navigation = () => container.querySelector('nav[aria-label="Workspace navigation"]')!;
+  const permanentDestinations = [
+    { to: "/agents", label: "Agents" },
+    { to: "/dashboard", label: "Dashboard" },
+    { to: "/routines", label: "Routines" },
+  ];
+
+  it.each([false, true])("keeps Agents, Dashboard and Routines right after Inbox when collapsed is %s", async collapsed => {
+    fixture.collapsed = collapsed;
+    await renderSidebar();
+    let previous = navigation().querySelector('a[href="/decisions"]')!;
+    expect(previous).not.toBeNull();
+    for (const destination of permanentDestinations) {
+      const link = navigation().querySelector<HTMLAnchorElement>(`a[href="${destination.to}"]`);
+      expect(link).not.toBeNull();
+      expect(link!.textContent).toContain(destination.label);
+      expect(link!.className).toContain("design-sidebar-item");
+      expect(previous.compareDocumentPosition(link!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      previous = link!;
+    }
+  });
+
+  it.each([false, true])("renders plugin sidebar links with the classic sidebar context when collapsed is %s", async collapsed => {
+    fixture.collapsed = collapsed;
+    await renderSidebar();
+    expect(container.querySelector('[data-plugin-slot-types="sidebar"]')?.textContent).toBe("Plugin slot outlet");
+    expect(fixture.pluginSlotOutlet.mock.calls.at(-1)?.[0]).toEqual({
+      slotTypes: ["sidebar"],
+      context: { companyId: "company", companyPrefix: "COO" },
+      className: "flex flex-col gap-0.5",
+      itemClassName: "text-(length:--text-compact) font-medium",
+      missingBehavior: "placeholder",
+    });
   });
 });
 
@@ -166,7 +213,7 @@ describe("Coordinator pinned pages", () => {
     localStorage.setItem("paperclip.coordinator.pinned-nav.v1:reviewer", JSON.stringify(["/routines", "/projects", "/unknown", "https://example.com"]));
     await renderSidebar();
     expect(Array.from(navigation().querySelectorAll("a")).map(link => link.getAttribute("href")))
-      .toEqual(["/chats", "/issues", "/decisions", "/routines", "/projects"]);
+      .toEqual(["/chats", "/issues", "/decisions", "/agents", "/dashboard", "/routines", "/routines", "/projects"]);
     fixture.userId = "other-user";
     await renderSidebar();
     expect(pinnedPage("/projects")).toBeNull();
