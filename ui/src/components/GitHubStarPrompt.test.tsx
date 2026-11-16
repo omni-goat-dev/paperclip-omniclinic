@@ -6,10 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ONBOARDING_FIRST_TASK_ORIGIN_KIND } from "@paperclipai/shared";
 import type { HealthStatus } from "@/api/health";
 import { GitHubStarPrompt, STAR_PROMPT_SEEN_KEY } from "./GitHubStarPrompt";
+import { BoardDialogs } from "./BoardDialogs";
 
 const state = vi.hoisted(() => ({ companyId: "company", loading: false, onboardingOpen: false, onboardingStatus: null as string | null, done: 5, listCompact: vi.fn() }));
 vi.mock("@/context/CompanyContext", () => ({ useCompany: () => ({ selectedCompanyId: state.companyId, loading: state.loading }) }));
-vi.mock("@/context/DialogContext", () => ({ useDialogState: () => ({ onboardingOpen: state.onboardingOpen }) }));
+vi.mock("@/context/DialogContext", () => ({
+  useDialogState: () => ({ onboardingOpen: state.onboardingOpen, newIssueOpen: false, newProjectOpen: false, newGoalOpen: false, newAgentOpen: false }),
+  useDialogActions: () => ({ closeNewIssue: () => {}, closeNewProject: () => {}, closeNewGoal: () => {}, closeNewAgent: () => {} }),
+}));
+vi.mock("./NewIssueDialog", () => ({ NewIssueDialog: () => null }));
+vi.mock("./NewProjectDialog", () => ({ NewProjectDialog: () => null }));
+vi.mock("./NewGoalDialog", () => ({ NewGoalDialog: () => null }));
+vi.mock("./NewAgentDialog", () => ({ NewAgentDialog: () => null }));
 vi.mock("@/api/issues", () => ({ issuesApi: {
   list: () => Promise.resolve(state.onboardingStatus ? [{ id: "onboarding", originKind: ONBOARDING_FIRST_TASK_ORIGIN_KIND, status: state.onboardingStatus }] : []),
   listCompact: (...args: unknown[]) => {
@@ -105,5 +113,19 @@ describe("GitHub star prompt", () => {
     await render(null);
     expect(visible()).toBe(false);
     expect(state.listCompact).not.toHaveBeenCalled();
+  });
+
+  it("is never mounted by the board dialog host", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Eligible state: a self-hosted company that already finished five tasks.
+    client.setQueryData(["health"], { deploymentMode: "local_trusted" });
+    await act(async () => root.render(<QueryClientProvider client={client}><BoardDialogs /></QueryClientProvider>));
+    for (let idle = 0, tick = 0; idle < 2 && tick < 100; tick++) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+      idle = client.isFetching() === 0 ? idle + 1 : 0;
+    }
+    expect(visible()).toBe(false);
+    expect(state.listCompact).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain("You completed");
   });
 });
